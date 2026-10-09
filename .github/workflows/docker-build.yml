@@ -5,11 +5,12 @@ on:
     branches: [main]
     paths:
       - 'prusa_connect_rtsp/**'
+      - '.github/workflows/docker-build.yml'
   workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: schmacka/rtsp-to-prusa-ha
+  IMAGE_NAME: stepman0/rtsp-to-prusa-ha
 
 jobs:
   build:
@@ -60,6 +61,8 @@ jobs:
           context: ./prusa_connect_rtsp
           push: true
           platforms: ${{ matrix.platform }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.arch }}:latest
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.arch }}:${{ steps.addon.outputs.version }}

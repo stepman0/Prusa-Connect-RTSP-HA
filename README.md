@@ -1,6 +1,6 @@
 # Home Assistant Add-on: Prusa Connect RTSP Camera
 
-[![Open your Home Assistant instance and show the add add-on repository dialog](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fschmacka%2FPrusa-Connect-RTSP-HA)
+[![Open your Home Assistant instance and show the add add-on repository dialog](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fstepman0%2FPrusa-Connect-RTSP-HA)
 
 Stream RTSP camera feeds to Prusa Connect for 3D printer monitoring through Home Assistant's configuration UI.
 
@@ -19,13 +19,30 @@ Stream RTSP camera feeds to Prusa Connect for 3D printer monitoring through Home
    - Navigate to **Settings** > **Add-ons** > **Add-on Store**
    - Click the menu (three dots) in the top right corner
    - Select **Repositories**
-   - Add: `https://github.com/schmacka/Prusa-Connect-RTSP-HA`
+   - Add: `https://github.com/stepman0/Prusa-Connect-RTSP-HA`
 
 2. Find "Prusa Connect RTSP Camera" in the add-on store and click **Install**
 
 3. Configure your cameras in the **Configuration** tab
 
 4. Start the add-on
+
+### Fork images and migration
+
+This fork is based on [schmacka/Prusa-Connect-RTSP-HA](https://github.com/schmacka/Prusa-Connect-RTSP-HA).
+It publishes its own versioned images at `ghcr.io/stepman0/rtsp-to-prusa-ha-{arch}`.
+
+Before installing a release, verify that **Build and Push Docker Images** has
+completed successfully in this fork's **Actions** tab. Fork workflows may need
+to be enabled first. After the first build, set each `rtsp-to-prusa-ha-*` package
+to **Public** in GitHub's package settings so Home Assistant can pull it without
+credentials. Public repository visibility alone does not make packages public.
+
+Refresh the Home Assistant Add-on Store after adding the fork repository.
+If the original add-on is already installed, save its configuration and back up
+any required timelapse files before migrating. Home Assistant treats the fork as
+a separate add-on: stop the original, install the fork's add-on, copy the camera
+configuration, and start the fork. Do not run both copies at the same time.
 
 ## Quick Start
 

@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.3.8] - 2026-10-09
+
+### Fixed
+
+- Update the Prusa Connect snapshot endpoint to `https://connect.prusa3d.com/c/snapshot` (upstream pull request #15).
+
+### Changed
+
+- Point repository metadata, add-on links, and installation instructions to the stepman0 fork.
+- Build and install this fork's own versioned container images from `ghcr.io/stepman0`.
+
 ## [1.3.7] - 2026-08-30
 
 ### Fixed

@@ -6,6 +6,7 @@ on:
     paths:
       - 'prusa_connect_rtsp/**'
       - '.github/workflows/docker-build.yml'
+      - 'tests/**'
   workflow_dispatch:
 
 env:
@@ -13,7 +14,19 @@ env:
   IMAGE_NAME: stepman0/rtsp-to-prusa-ha
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test camera runtime
+        run: |
+          python3 -m unittest discover -s tests -v
+          bash -n prusa_connect_rtsp/run.sh
+
   build:
+    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: read

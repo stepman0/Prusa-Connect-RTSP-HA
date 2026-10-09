@@ -5,18 +5,26 @@ import time
 import json
 from datetime import datetime
 import glob
+import signal
+import threading
 
-# Number of times / delay to retry the initial camera connection at startup.
-# Cameras and networking are often not ready the instant the add-on boots, so we
-# retry instead of exiting immediately (which forced a manual restart).
-CONNECT_RETRIES = int(os.environ.get("CONNECT_RETRIES", "12"))
-CONNECT_RETRY_DELAY = int(os.environ.get("CONNECT_RETRY_DELAY", "10"))
+shutdown_requested = threading.Event()
+
+def handle_shutdown(signum, _frame):
+    print(f"Received signal {signum}; stopping camera.")
+    shutdown_requested.set()
+    if signum == signal.SIGINT:
+        raise KeyboardInterrupt
+
+signal.signal(signal.SIGTERM, handle_shutdown)
+signal.signal(signal.SIGINT, handle_shutdown)
 
 # Get configuration from ENV or set default values
 TOKEN = os.environ.get("TOKEN", "YOUR_TOKEN_HERE")
 FINGERPRINT = os.environ.get("FINGERPRINT", "YOUR_FINGERPRINT_HERE")
 RTSP_URL = os.environ.get("RTSP_URL")
 PRUSA_URL = "https://connect.prusa3d.com/c/snapshot"
+PRUSA_INFO_URL = "https://connect.prusa3d.com/c/info"
 
 # Upload frequency configuration (in seconds)
 UPLOAD_INTERVAL = int(os.environ.get("UPLOAD_INTERVAL", "5"))  # Default 5 seconds
@@ -83,7 +91,12 @@ if MQTT_HOST:
             if rc != 0:
                 print(f"⚠️ MQTT disconnected unexpectedly (rc={rc}), will auto-reconnect")
 
-        mqtt_client = paho_mqtt.Client()
+        if hasattr(paho_mqtt, "CallbackAPIVersion"):
+            mqtt_client = paho_mqtt.Client(
+                callback_api_version=paho_mqtt.CallbackAPIVersion.VERSION1
+            )
+        else:
+            mqtt_client = paho_mqtt.Client()
         if MQTT_USER:
             mqtt_client.username_pw_set(MQTT_USER, MQTT_PASS)
         # Set Last Will and Testament
@@ -119,6 +132,21 @@ else:
 print(f"📊 Upload interval: {UPLOAD_INTERVAL} seconds")
 print("🔄 New HTTP session for each frame (PrusaConnect fix)")
 print("📷 New camera connection for each frame (fresh frames fix)")
+
+def set_prusa_camera_name(name):
+    try:
+        response = requests.put(
+            PRUSA_INFO_URL,
+            json={"config": {"name": name}},
+            headers={"fingerprint": fingerprint_header, "token": TOKEN},
+            timeout=15,
+        )
+        if 200 <= response.status_code < 300:
+            print(f"Camera name registered with Prusa Connect: {name}")
+        else:
+            print(f"Could not register camera name (HTTP {response.status_code}): {response.text}")
+    except requests.RequestException as error:
+        print(f"Could not register camera name: {error}")
 
 def cleanup_timelapse_directory():
     """
@@ -158,7 +186,12 @@ def capture_frame_from_camera():
     try:
         # Open new camera connection, forcing FFMPEG backend to avoid GStreamer
         # missing RTSP plugin errors on Alpine-based containers.
-        cap = cv2.VideoCapture(RTSP_URL, cv2.CAP_FFMPEG)
+        cap = cv2.VideoCapture(
+            RTSP_URL,
+            cv2.CAP_FFMPEG,
+            [cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 10000,
+             cv2.CAP_PROP_READ_TIMEOUT_MSEC, 5000],
+        )
         if not cap.isOpened():
             print("❌ Cannot open RTSP camera")
             return None
@@ -358,25 +391,6 @@ def cleanup_old_frames(max_frames=100000):
     except Exception as e:
         print(f"❌ Error cleaning up frames: {e}")
 
-# Test camera connection, retrying so a not-yet-ready camera/network at boot
-# doesn't force the user to manually restart the add-on.
-print("🔌 Testing camera connection...")
-test_frame = None
-for attempt in range(1, CONNECT_RETRIES + 1):
-    test_frame = capture_frame_from_camera()
-    if test_frame is not None:
-        break
-    if attempt < CONNECT_RETRIES:
-        print(f"⏳ Camera not reachable yet (attempt {attempt}/{CONNECT_RETRIES}). "
-              f"Retrying in {CONNECT_RETRY_DELAY}s...")
-        time.sleep(CONNECT_RETRY_DELAY)
-
-if test_frame is None:
-    print(f"❌ Cannot connect to RTSP camera after {CONNECT_RETRIES} attempts.")
-    exit(1)
-
-print("✅ Camera connection working. Starting frame upload...")
-
 frame_count = 0
 successful_uploads = 0
 last_timelapse_save = 0
@@ -384,12 +398,28 @@ consecutive_failures = 0
 backoff_active = False
 
 try:
-    while True:
+    print("🔌 Testing camera connection...")
+    attempt = 0
+    camera_ready = False
+    while not shutdown_requested.is_set():
+        if capture_frame_from_camera() is not None:
+            camera_ready = True
+            break
+        attempt += 1
+        delay = min(60, 5 * attempt)
+        print(f"Camera not reachable (attempt {attempt}); retrying in {delay}s.")
+        shutdown_requested.wait(delay)
+
+    if camera_ready and not shutdown_requested.is_set():
+        print("✅ Camera connection working. Starting frame upload...")
+        set_prusa_camera_name(CAMERA_NAME)
+
+    while camera_ready and not shutdown_requested.is_set():
         # Capture fresh frame from camera (new connection)
         frame = capture_frame_from_camera()
         if frame is None:
             print("⚠️ Frame capture error. Waiting...")
-            time.sleep(5)
+            shutdown_requested.wait(5)
             continue
 
         current_time = time.time()
@@ -460,7 +490,7 @@ try:
             else:
                 sleep_time = UPLOAD_INTERVAL
 
-        time.sleep(sleep_time)
+        shutdown_requested.wait(sleep_time)
 
 except KeyboardInterrupt:
     print("\n🛑 Stopped by user")
@@ -484,6 +514,6 @@ finally:
             )
             mqtt_client.loop_stop()
             mqtt_client.disconnect()
-        except Exception:
-            pass
+        except Exception as error:
+            print(f"MQTT shutdown failed: {error}")
     print("✅ Work completed")

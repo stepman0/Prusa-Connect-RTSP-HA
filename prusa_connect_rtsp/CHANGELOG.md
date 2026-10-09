@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.4.0] - 2026-10-09
+
+### Added
+
+- Register configured camera names with Prusa Connect via `/c/info`.
+- Keep fingerprints stable across camera renames using token-keyed storage, with migration from legacy files.
+- Retry unreachable cameras indefinitely and restart crashed camera processes independently after 10 seconds.
+
+### Fixed
+
+- Select the compatible callback API when using paho-mqtt 2.x.
+- Forward stop signals to tracked camera processes and wait for their completion, including during restart delays.
+- Interrupt upload backoff promptly on stop and bound RTSP connection/read waits.
+
+### Notes
+
+- Adapted selected changes from DariBer/Prusa-Connect-RTSP-HA; retained the current snapshot endpoint, FFMPEG backend, credential masking, offline upload backoff, and stepman0 container images.
+- Timelapse storage and cleanup behavior are unchanged; timelapse remains disabled by default.
+
 ## [1.3.8] - 2026-10-09
 
 ### Fixed
